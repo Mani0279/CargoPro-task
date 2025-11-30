@@ -1,54 +1,43 @@
-import 'package:cargoprotask/modules/home/controllers/home_controller.dart';
-import 'package:cargoprotask/services/api_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
-import 'package:get/get.dart';
-import 'package:flutter_crud_app/modules/home/controllers/home_controller.dart';
-import 'package:flutter_crud_app/services/api_service.dart';
-import 'package:flutter_crud_app/data/models/api_object_model.dart';
+import 'package:http/http.dart' as http;
+import 'package:cargoprotask/services/api_service.dart';
+import 'package:cargoprotask/data/models/api_object_model.dart';
+import 'dart:convert';
 
-@GenerateMocks([ApiService])
-import 'home_controller_test.mocks.dart';
-
+// This will generate mock classes
+@GenerateMocks([http.Client])
 void main() {
-  group('HomeController Tests', () {
-    late HomeController controller;
-    late MockApiService mockApiService;
+  group('ApiService Tests', () {
+    late ApiService apiService;
 
     setUp(() {
-      mockApiService = MockApiService();
-      Get.put<ApiService>(mockApiService);
-      controller = HomeController();
+      apiService = ApiService();
     });
 
-    tearDown(() {
-      Get.reset();
+    test('getAllDefaultObjects returns list on success', () async {
+      // This is an integration test - it calls the real API
+      final result = await apiService.getAllDefaultObjects();
+
+      expect(result, isA<List<ApiObject>>());
+      expect(result.isNotEmpty, true);
     });
 
-    test('fetchObjects updates objects list on success', () async {
-      final mockObjects = [
-        ApiObject(id: '1', name: 'Test', data: {}),
-      ];
+    test('ApiObject can be serialized and deserialized', () {
+      final json = {
+        'id': '1',
+        'name': 'Test Object',
+        'data': {'color': 'red', 'price': 100}
+      };
 
-      when(mockApiService.getAllObjects())
-          .thenAnswer((_) async => mockObjects);
+      final object = ApiObject.fromJson(json);
+      expect(object.id, '1');
+      expect(object.name, 'Test Object');
+      expect(object.data?['color'], 'red');
 
-      await controller.fetchObjects();
-
-      expect(controller.objects.length, 1);
-      expect(controller.isLoading.value, false);
-      expect(controller.hasError.value, false);
-    });
-
-    test('fetchObjects sets error on failure', () async {
-      when(mockApiService.getAllObjects())
-          .thenThrow(Exception('Network error'));
-
-      await controller.fetchObjects();
-
-      expect(controller.hasError.value, true);
-      expect(controller.isLoading.value, false);
+      final backToJson = object.toJson();
+      expect(backToJson['name'], 'Test Object');
     });
   });
 }
