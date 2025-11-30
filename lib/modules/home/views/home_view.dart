@@ -73,34 +73,88 @@ class HomeView extends GetView<HomeController> {
             padding: const EdgeInsets.all(8),
             itemBuilder: (context, index) {
               final object = controller.objects[index];
+              final isUserCreated = controller.isUserCreatedObject(object.id);
+              final canDelete = controller.canDeleteObject(object.id);
+
               return Card(
                 margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                elevation: isUserCreated ? 3 : 1,
+                color: isUserCreated ? Colors.blue.shade50 : null,
                 child: ListTile(
                   leading: CircleAvatar(
-                    child: Text(object.name[0].toUpperCase()),
+                    backgroundColor: isUserCreated ? Colors.blue : Colors.grey,
+                    child: Text(
+                      object.name[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.white),
+                    ),
                   ),
-                  title: Text(
-                    object.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          object.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (isUserCreated)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'YOURS',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('ID: ${object.id ?? "N/A"}'),
+                      Text(
+                        'ID: ${object.id ?? "N/A"}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
                       if (object.data != null && object.data!.isNotEmpty)
                         Text(
                           'Data: ${object.data!.keys.join(", ")}',
                           style: const TextStyle(fontSize: 12),
                         ),
+                      if (!canDelete)
+                        Text(
+                          '🔒 Read-only (Default API object)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.orange[700],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
                     ],
                   ),
-                  trailing: IconButton(
+                  trailing: canDelete
+                      ? IconButton(
                     icon: const Icon(Icons.delete, color: Colors.red),
                     onPressed: () {
                       if (object.id != null) {
                         controller.deleteObject(object.id!);
                       }
                     },
+                  )
+                      : Tooltip(
+                    message: 'Cannot delete default objects',
+                    child: Icon(
+                      Icons.lock,
+                      color: Colors.grey[400],
+                    ),
                   ),
                   onTap: () {
                     Get.toNamed(Routes.DETAIL, arguments: object);
@@ -111,12 +165,18 @@ class HomeView extends GetView<HomeController> {
           ),
         );
       }),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          await Get.toNamed(Routes.CREATE);
-          controller.refreshObjects();
+          // Navigate to create page and wait for result
+          final result = await Get.toNamed(Routes.CREATE);
+
+          // If creation was successful, refresh the list
+          if (result == true) {
+            controller.refreshObjects();
+          }
         },
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text('Create'),
       ),
     );
   }

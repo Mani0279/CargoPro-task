@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../data/models/api_object_model.dart';
 import '../../../services/api_service.dart';
+import '../../../services/storage_service.dart';
 
 class HomeController extends GetxController {
   final ApiService _apiService = Get.find<ApiService>();
+  final StorageService _storageService = StorageService();
 
   final RxList<ApiObject> objects = <ApiObject>[].obs;
   final RxBool isLoading = false.obs;
@@ -24,13 +26,26 @@ class HomeController extends GetxController {
       hasError.value = false;
       errorMessage.value = '';
 
-      final result = await _apiService.getAllObjects();
+      // Fetch default objects (IDs 1-13)
+      final defaultObjects = await _apiService.getAllDefaultObjects();
 
-      print('✅ Fetched ${result.length} objects');
-      objects.value = result;
+      // Fetch user-created objects
+      final createdIds = _storageService.getCreatedObjectIds();
+      print('📦 Found ${createdIds.length} user-created object IDs: $createdIds');
+
+      List<ApiObject> userCreatedObjects = [];
+      if (createdIds.isNotEmpty) {
+        userCreatedObjects = await _apiService.getObjectsByIds(createdIds);
+        print('✅ Fetched ${userCreatedObjects.length} user-created objects');
+      }
+
+      // Combine both lists (user-created first, then defaults)
+      objects.value = [...userCreatedObjects, ...defaultObjects];
+
+      print('✅ Total objects: ${objects.length}');
       isLoading.value = false;
 
-      if (result.isEmpty) {
+      if (objects.isEmpty) {
         Get.snackbar(
           'Info',
           'No objects found. Create your first one!',
@@ -71,8 +86,34 @@ class HomeController extends GetxController {
     }
   }
 
+  // Check if object is user-created
+  bool isUserCreatedObject(String? id) {
+    if (id == null) return false;
+    final createdIds = _storageService.getCreatedObjectIds();
+    return createdIds.contains(id);
+  }
+
+  // Check if object can be deleted
+  bool canDeleteObject(String? id) {
+    if (id == null) return false;
+    return isUserCreatedObject(id);
+  }
+
   Future<void> deleteObject(String id) async {
     try {
+      // Check if object can be deleted
+      if (!canDeleteObject(id)) {
+        Get.snackbar(
+          'Cannot Delete',
+          'This is a default API object and cannot be deleted. Only objects you create can be deleted.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 4),
+        );
+        return;
+      }
+
       // Show confirmation dialog
       bool? confirmed = await Get.dialog<bool>(
         AlertDialog(
@@ -114,6 +155,9 @@ class HomeController extends GetxController {
       // Delete from server
       bool success = await _apiService.deleteObject(id);
 
+      // Remove from storage
+      _storageService.removeCreatedObjectId(id);
+
       // Close loading dialog
       Get.back();
 
@@ -148,7 +192,7 @@ class HomeController extends GetxController {
 
       Get.snackbar(
         'Error',
-        'Failed to delete object: ${e.toString()}',
+        'Failed to delete object.',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,

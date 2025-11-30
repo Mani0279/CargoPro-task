@@ -5,10 +5,10 @@ import '../data/models/api_object_model.dart';
 class ApiService {
   static const String baseUrl = 'https://api.restful-api.dev/objects';
 
-  // GET - Fetch all objects
-  Future<List<ApiObject>> getAllObjects({int page = 1, int limit = 20}) async {
+  // GET - Fetch all default objects
+  Future<List<ApiObject>> getAllDefaultObjects() async {
     try {
-      print('📡 Fetching objects from API...');
+      print('📡 Fetching default objects from API...');
       final response = await http.get(
         Uri.parse(baseUrl),
         headers: {
@@ -18,24 +18,72 @@ class ApiService {
       ).timeout(
         const Duration(seconds: 30),
         onTimeout: () {
-          throw Exception('Request timeout - Please check your internet connection');
+          throw Exception('Request timeout');
         },
       );
 
       print('📡 Response status: ${response.statusCode}');
-      print('📡 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
         final objects = jsonList.map((json) => ApiObject.fromJson(json)).toList();
-        print('✅ Successfully fetched ${objects.length} objects');
+        print('✅ Successfully fetched ${objects.length} default objects');
         return objects;
       } else {
         throw Exception('Failed to load objects. Status: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ Error fetching objects: $e');
+      print('❌ Error fetching default objects: $e');
       rethrow;
+    }
+  }
+
+  // GET - Fetch objects by IDs (for user-created objects)
+  Future<List<ApiObject>> getObjectsByIds(List<String> ids) async {
+    if (ids.isEmpty) return [];
+
+    try {
+      print('📡 Fetching ${ids.length} objects by IDs...');
+
+      // Build query string: ?id=1&id=2&id=3
+      final queryParams = ids.map((id) => 'id=$id').join('&');
+      final url = '$baseUrl?$queryParams';
+
+      print('📡 URL: $url');
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 30));
+
+      print('📡 Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final dynamic responseBody = json.decode(response.body);
+
+        // Handle both single object and array responses
+        List<dynamic> jsonList;
+        if (responseBody is List) {
+          jsonList = responseBody;
+        } else if (responseBody is Map) {
+          jsonList = [responseBody];
+        } else {
+          jsonList = [];
+        }
+
+        final objects = jsonList.map((json) => ApiObject.fromJson(json)).toList();
+        print('✅ Successfully fetched ${objects.length} objects by IDs');
+        return objects;
+      } else {
+        print('⚠️ Failed to fetch some objects. Status: ${response.statusCode}');
+        return [];
+      }
+    } catch (e) {
+      print('❌ Error fetching objects by IDs: $e');
+      return [];
     }
   }
 

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../data/models/api_object_model.dart';
 import '../../../services/api_service.dart';
+import '../../../services/storage_service.dart';
+import '../../home/controllers/home_controller.dart';
 
 class KeyValuePair {
   final String id;
@@ -28,6 +30,7 @@ class KeyValuePair {
 
 class ObjectFormController extends GetxController {
   final ApiService _apiService = Get.find<ApiService>();
+  final StorageService _storageService = StorageService();
 
   final nameController = TextEditingController();
   final dataController = TextEditingController(); // For JSON mode
@@ -185,22 +188,34 @@ class ObjectFormController extends GetxController {
   }
 
   Future<void> saveObject() async {
+    print('💾 saveObject called');
+
     if (!formKey.currentState!.validate()) {
+      print('❌ Form validation failed');
+      Get.snackbar(
+        'Validation Error',
+        'Please fill in all required fields correctly',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
       return;
     }
 
+    print('✅ Form validation passed');
     isLoading.value = true;
 
     try {
       Map<String, dynamic>? dataMap;
 
       if (isJsonMode.value) {
-        // JSON mode
+        print('📝 Using JSON mode');
         if (dataController.text.isNotEmpty) {
           dataMap = json.decode(dataController.text) as Map<String, dynamic>;
+          print('📝 Parsed JSON: $dataMap');
         }
       } else {
-        // UI mode - build from key-value pairs
+        print('📝 Using Form mode');
         dataMap = <String, dynamic>{};
         for (var pair in keyValuePairs) {
           if (pair.keyController.text.isNotEmpty) {
@@ -210,6 +225,7 @@ class ObjectFormController extends GetxController {
         if (dataMap.isEmpty) {
           dataMap = null;
         }
+        print('📝 Built data from form: $dataMap');
       }
 
       final object = ApiObject(
@@ -218,37 +234,78 @@ class ObjectFormController extends GetxController {
         data: dataMap,
       );
 
+      print('📦 Object to save: ${object.toJson()}');
+
       if (isEdit.value && existingObject.value?.id != null) {
+        print('✏️ Updating existing object...');
         await _apiService.updateObject(existingObject.value!.id!, object);
+
+        // Close loading
+        isLoading.value = false;
+
+        // Navigate back to home and refresh
+        Get.until((route) => route.settings.name == '/home');
+
+        // Show success message
         Get.snackbar(
           'Success',
           'Object updated successfully',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green,
           colorText: Colors.white,
+          duration: const Duration(seconds: 2),
         );
+
+        // Trigger refresh on home controller
+        if (Get.isRegistered<HomeController>()) {
+          Get.find<HomeController>().refreshObjects();
+        }
+
       } else {
-        await _apiService.createObject(object);
+        print('➕ Creating new object...');
+        final created = await _apiService.createObject(object);
+        print('✅ Created object with ID: ${created.id}');
+
+        // Store the created object ID
+        if (created.id != null) {
+          _storageService.addCreatedObjectId(created.id!);
+          print('💾 Stored object ID in local storage');
+        }
+
+        // Close loading
+        isLoading.value = false;
+
+        // Navigate back to home
+        Get.until((route) => route.settings.name == '/home');
+
+        // Show success message
         Get.snackbar(
           'Success',
-          'Object created successfully',
+          'Object created successfully!',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green,
           colorText: Colors.white,
+          duration: const Duration(seconds: 2),
         );
+
+        // Trigger refresh on home controller
+        if (Get.isRegistered<HomeController>()) {
+          Get.find<HomeController>().refreshObjects();
+        }
       }
 
-      Get.back(result: true);
     } catch (e) {
+      print('❌ Error in saveObject: $e');
+      isLoading.value = false;
+
       Get.snackbar(
         'Error',
-        'Failed to save object: $e',
+        'Failed to save object: ${e.toString()}',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
+        duration: const Duration(seconds: 3),
       );
-    } finally {
-      isLoading.value = false;
     }
   }
 }
